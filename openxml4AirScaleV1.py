@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 
-directory_path = "/home/jlplautz/proj2025/kpidata/kpi_files"
+directory_path = "/Userdata/proj2025/kpidata/kpi_files"
 
 # Get a sorted list of files in the directory
 files = sorted(os.listdir(directory_path))
@@ -30,10 +30,11 @@ def process_kpiFiles(file_path):
             measurementType = None
 
             for child in PMMOResult:
-                if child.tag == 'MO':
+                if child.tag == 'MO' and child.attrib.get('dimension') == 'network_element':
                     for subchild in child:
                         if subchild.tag == 'DN':
-                            manageObject = subchild.text
+                            original = subchild.text
+                            manageObject = original.replace("PLMN-PLMN/", "")  # Replace spaces with underscores
                 elif child.tag == 'NE-WBTS_1.0':
                     measurementType = child.attrib.get('measurementType')
 

@@ -15,11 +15,11 @@ destination_path = "/Userdata/proj2025/kpidata/kpi_files_read"
 
 # PostgreSQL connection config
 db_config = {
-    "dbname": "kpidata",
+    "dbname": "kpiAirScale",
     "user": "Solis",
     "password": "Solis2025",
     "host": "localhost",
-    "port": 5432
+    "port": 5433
 }
 
 def create_table_if_not_exists(measurementType, kpi_columns):
@@ -97,6 +97,3 @@ for file_name in files:
     file_path = os.path.join(directory_path, file_name)
     if os.path.isfile(file_path):  # Ensure it's a file
         process_kpi_file(file_path)
-
-# Example usage
-#process_kpi_file("c:/Userdata/proj2025/openkpi2/kpi_files/10.1.1.2_PM.BTS-660701.20250506.181500.xml")

@@ -8,39 +8,41 @@ import shutil
 import xml.etree.ElementTree as ET
 
 """
-docker run --name kpiairscale -e POSTGRES_USER=Solis -e POSTGRES_PASSWORD=Solis2025 -e POSTGRES_DB=kpiairscale -p 5433:5432 -d postgres:11
-docker run --name kpiAirScale -e POSTGRES_USER=Solis -e POSTGRES_PASSWORD=Solis2025 -e POSTGRES_DB=kpiAirScale -d -p 5436:5432 -v pgdata:/Userdata/postgresql/data postgres:11
+Example how can we create a dickr container with postgresql
+docker run --name kpiFlexiZone -e POSTGRES_USER=Solis -e POSTGRES_PASSWORD=Solis2025 -e POSTGRES_DB=kpiFlexiZone -d -p 5434:5432 -v pgdata:/var/openkpi/postgresql/kpiFlexiZone postgres:11
 """
 
 
 # List of radios with their connection details
 radios = [
-    {"server_ip": "10.1.16.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.16.21","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.38.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.39.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.42.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.50.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.52.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.53.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},
-    {"server_ip": "10.1.8.2", "username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/"},    
+    # {"server_ip": "10.1.1.2"  ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.101.2","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.16.12","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.16.31","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.16.32","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.30.2" ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.35.2" ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.36.10","username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    # {"server_ip": "10.1.60.2" ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
+    {"server_ip": "10.1.5.2"  ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
 ]
 
 # Local directory where files will be saved
-dir_zip = "/Userdata/proj2025/kpidata/kpi_zip"
-dir_files = "/Userdata/proj2025/kpidata/kpi_files"
-dir_files_read = "/Userdata/proj2025/kpidata/kpi_files_read"
-
-# dir_zip = r"/var/openkpi/kpi_files"
+# dir_zip = "/var/openkpi/fzm_zip"
+# dir_files = "var/openkpi/fzm_files"
+# dir_files_read = "/var/openkpi/fzm_files_read"
+dir_zip = r"/Userdata/proj2025/kpiData/fzm_zip"
+dir_files = r"/Userdata/proj2025/kpiData/fzm_files"
+dir_files_read = r"/Userdata/proj2025/kpiData/fzm_files_read"
 os.makedirs(dir_zip, exist_ok=True)
 
 # PostgreSQL connection config
 db_config = {
-    "dbname": "kpiAirScale",
+    "dbname": "kpiFlexiZone",
     "user": "Solis",
     "password": "Solis2025",
     "host": "localhost",
-    "port": 5436
+    "port": 5434
 }
 
 def get_current_quarter():
@@ -63,10 +65,10 @@ def get_current_quarter():
 def adjust_file_name(original_name):
     """
     Adjust the file name to change the extension from .raw to .xml.
-    Example: "PM.BTS-414225.20250505.151500.LTE.raw" -> "PM.BTS-414225.20250505.151500.LTE.xml"
+    Example: "PM.BTS-414225.20250505.3000.ANY.raw.gz" -> "PM.BTS-414225.20250505.3000.xml"
     """
     if original_name.endswith(".raw.gz"):
-        new_name = original_name.replace("0000.ANY.raw.gz", "0000.xml")
+        new_name = original_name.replace("3000.LTE.raw.gz", "3000.xml")
         return new_name, None  # No need to return a timestamp
     return original_name, None  # Return the original name if it doesn't end with .raw
 
@@ -90,23 +92,26 @@ def download_files():
             print(f"Connecting to server {server_ip}...")
             remote_files = sftp.listdir(remote_directory)
 
-            # Get the current quarter
-            current_quarter = get_current_quarter()
-            print(f"Current quarter: {current_quarter}")
+            # # Get the current quarter
+            # current_quarter = get_current_quarter()
+            # print(f"Current quarter: {current_quarter}")
 
         except Exception as e:
             print(f"Error during file transfer from {server_ip}: {e}")
 
         for file_name in remote_files:
             # Check if the file matches the quarterly KPI naming pattern
-            if file_name.startswith("PM.BTS") and file_name.endswith("0000.ANY.raw.gz"):
+            if file_name.startswith("PM.BTS") and file_name.endswith("0000.LTE.raw.gz"):
                 # Adjust the file name and extract the timestamp
                 new_file_name, _ = adjust_file_name(file_name)
 
                 # Define remote and local file paths
                 remote_file_path = os.path.join(remote_directory, file_name)
+                print(remote_directory)
                 local_file_zip = os.path.join(dir_zip, new_file_name)
+                print(dir_zip)
                 local_file_path = os.path.join(dir_files, new_file_name)
+                print(local_file_path)
 
                 # Check if the file already exists locally
                 if os.path.exists(local_file_zip):
@@ -119,7 +124,6 @@ def download_files():
                 print(f"File {new_file_name} downloaded successfully.")
 
                 # Open the .gz file and write the uncompressed data to the output file
-                print(local_file_zip)
                 with gzip.open(local_file_zip, 'rb') as f_in:
                     with open(local_file_path, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
@@ -184,21 +188,20 @@ def process_kpi_file(file_path):
         for PMMOResult in PMSetup.iter('PMMOResult'):
             manageObject = None
             for child in PMMOResult:
-                if child.tag == 'MO' and child.attrib.get('dimension') == 'network_element':
+                if child.tag == 'MO':
                     for subchild in child:
-                        if subchild.tag == 'DN':
+                        if subchild.tag == 'localMoid':
                             original = subchild.text
-                            manageObject = original.replace("PLMN-PLMN/", "")  # Replace spaces with underscores
+                            manageObject = original.replace("DN:", "")  # Replace spaces with underscores
                 elif child.tag == 'NE-WBTS_1.0':
                     measurementType = child.attrib.get('measurementType')
                     kpi_dict = {}
                     for subchild in child:
                         try:
                             value = int(subchild.text)
+                            kpi_dict[subchild.tag] = value
                         except (TypeError, ValueError):
                             continue
-                        # if value != 0:
-                        kpi_dict[subchild.tag] = value
 
                     if kpi_dict:  # Only proceed if there are non-zero kpiValues
                         kpi_columns = sorted(kpi_dict.keys())
@@ -213,6 +216,7 @@ def process_kpi_file(file_path):
 # Loop through all files in the directory
 def process_all_files():
     files = sorted(os.listdir(dir_files))
+    print(files)
     for file_name in files:
         file_path = os.path.join(dir_files, file_name)
         if os.path.isfile(file_path):  # Ensure it's a file
@@ -222,3 +226,4 @@ def process_all_files():
 if __name__ == "__main__":
     download_files()
     process_all_files()
+

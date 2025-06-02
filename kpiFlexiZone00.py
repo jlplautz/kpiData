@@ -5,14 +5,16 @@ import gzip
 import psycopg2
 import pytz
 import shutil
+import socket
+from time import sleep
 import xml.etree.ElementTree as ET
+
 
 """
 Example how can we create a dickr container with postgresql
 docker run --name kpiFlexiZone -e POSTGRES_USER=Solis -e POSTGRES_PASSWORD=Solis2025 -e POSTGRES_DB=kpiFlexiZone -d -p 5434:5432 -v pgdata:/Userdata/postgresql/kpiFlexiZone postgres:11
 """
-
-
+    
 # List of radios with their connection details
 radios = [
     {"server_ip": "10.1.1.2"  ,"username": "toor4nsn", "password": "oZPS0POrRieRtu","remote_directory": "/ram/stats/iOms/"},
@@ -43,23 +45,6 @@ db_config = {
     "port": 5434
 }
 
-def get_current_quarter():
-    """
-    Determine the current quarter of the hour (e.g., 15:00, 15:15, 15:30, 15:45).
-    """
-    utc = pytz.utc
-    now = datetime.now(utc)
-    print(now)
-    minute = now.minute
-    if 0 <= minute < 15:
-        return f"{now.hour:02d}:00"
-    elif 15 <= minute < 30:
-        return f"{now.hour:02d}:15"
-    elif 30 <= minute < 45:
-        return f"{now.hour:02d}:30"
-    else:
-        return f"{now.hour:02d}:45"
-
 def adjust_file_name(original_name):
     """
     Adjust the file name to change the extension from .raw to .xml.
@@ -71,74 +56,99 @@ def adjust_file_name(original_name):
     return original_name, None  # Return the original name if it doesn't end with .raw
 
 def download_files():
-# def download_and_rename_files(server_ip, username, password, remote_directory):
     for radio in radios:
-        try:
+        max_retries = 1
+        retry_delay = 3  # seconds between retries
+        connected = False
+        
+        for attempt in range(max_retries):
             server_ip = radio["server_ip"]
             username = radio["username"]
             password = radio["password"]
             remote_directory = radio["remote_directory"]
+            
+            transport = None
+            sftp = None
 
-            # Establish SFTP connection
-            transport = paramiko.Transport((server_ip, 22))
-            transport.connect(username=username, password=password)
+            try:
+                print(f"Attempt {attempt + 1}/{max_retries} to connect to {server_ip}")
 
-            # Create the SFTP client
-            sftp = paramiko.SFTPClient.from_transport(transport)
+                # Establish SFTP connection
+                transport = paramiko.Transport((server_ip, 22))
+                transport.connect(username=username, password=password)
 
-            # List files in the remote directory
-            print(f"Connecting to server {server_ip}...")
-            remote_files = sftp.listdir(remote_directory)
+                # Create the SFTP client
+                sftp = paramiko.SFTPClient.from_transport(transport)
 
-            # # Get the current quarter
-            # current_quarter = get_current_quarter()
-            # print(f"Current quarter: {current_quarter}")
+                # List files in the remote directory
+                print(f"Connecting to server {server_ip}...")
+                remote_files = sftp.listdir(remote_directory)
 
-        except Exception as e:
-            print(f"Error during file transfer from {server_ip}: {e}")
+                for file_name in remote_files:
+                    # Check if the file matches the quarterly KPI naming pattern
+                    if file_name.startswith("PM.BTS") and file_name.endswith("0000.LTE.raw.gz"):
+                        # Adjust the file name and extract the timestamp
+                        new_file_name, _ = adjust_file_name(file_name)
 
-        for file_name in remote_files:
-            # Check if the file matches the quarterly KPI naming pattern
-            if file_name.startswith("PM.BTS") and file_name.endswith("0000.LTE.raw.gz"):
-                # Adjust the file name and extract the timestamp
-                new_file_name, _ = adjust_file_name(file_name)
+                        # Define remote and local file paths
+                        remote_file_path = os.path.join(remote_directory, file_name)
+                        local_file_zip = os.path.join(dir_zip, new_file_name)
+                        local_file_path = os.path.join(dir_files, new_file_name)
 
-                # Define remote and local file paths
-                remote_file_path = os.path.join(remote_directory, file_name)
-                local_file_zip = os.path.join(dir_zip, new_file_name)
-                local_file_path = os.path.join(dir_files, new_file_name)
+                        # Check if the file already exists locally
+                        if os.path.exists(local_file_zip):
+                            print(f"File {new_file_name} already exists locally. Skipping download.")
+                            continue
 
-                # Check if the file already exists locally
-                if os.path.exists(local_file_zip):
-                    print(f"File {new_file_name} already exists locally. Skipping download.")
-                    continue
+                        # Download the file with the new name
+                        print(f"Downloading {file_name} as {new_file_name}...")
+                        sftp.get(remote_file_path, local_file_zip)
+                        print(f"File {new_file_name} downloaded successfully.")
 
-                # Download the file with the new name
-                print(f"Downloading {file_name} as {new_file_name}...")
-                sftp.get(remote_file_path, local_file_zip)
-                print(f"File {new_file_name} downloaded successfully.")
+                        # Open the .gz file and write the uncompressed data to the output file
+                        print(local_file_zip)
+                        with gzip.open(local_file_zip, 'rb') as f_in:
+                            with open(local_file_path, 'wb') as f_out:
+                                shutil.copyfileobj(f_in, f_out)
 
-                # Open the .gz file and write the uncompressed data to the output file
-                print(local_file_zip)
-                with gzip.open(local_file_zip, 'rb') as f_in:
-                    with open(local_file_path, 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
+                        try:
+                            for filename in os.listdir(dir_zip):
+                                file_path = os.path.join(dir_zip, filename)
+                                if os.path.isfile(file_path):
+                                    os.remove(file_path)
+                                    print(f'Removed: {file_path}')
+                        except PermissionError as e:
+                            print(f'Error: {e}')
+                        except Exception as e:
+                            print(f'An error occurred: {e}')
 
-                try:
-                    for filename in os.listdir(dir_zip):
-                        file_path = os.path.join(dir_zip, filename)
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            print(f'Removed: {file_path}')
-                except PermissionError as e:
-                    print(f'Error: {e}')
-                except Exception as e:
-                    print(f'An error occurred: {e}')
-                    
-        sftp.close()
-        transport.close()
-        print(f"All files from {server_ip} processed successfully.\n")
+                connected = True
+                break  # Success, exit retry loop
 
+            except paramiko.SSHException as e:
+                print(f"SSH error connecting to {server_ip}: {str(e)}")
+            except socket.timeout:
+                print(f"Connection timeout for {server_ip}")
+            except socket.error as e:
+                print(f"Socket error for {server_ip}: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error with {server_ip}: {str(e)}")  
+
+            finally:
+                if sftp: sftp.close()
+                if transport: transport.close()
+                
+            if attempt < max_retries - 1:
+                print(f"Retrying in {retry_delay} seconds...")
+                sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+        
+        if not connected:
+            print(f"Failed to connect to {server_ip} after {max_retries} attempts")
+            continue  # Skip to next radio
+            
+        # Continue with file processing if connection was successful
+        print(f"Successfully processed files from {server_ip}")
 
 
 def create_table_if_not_exists(measurementType, kpi_columns):
